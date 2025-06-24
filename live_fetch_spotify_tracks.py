@@ -2,10 +2,13 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import sqlite3
 import time
+import os
+from dotenv import load_dotenv
 
-CLIENT_ID = '0a99e00c7ac24f10b1e6263402ad1bd6'
-CLIENT_SECRET = '03fdb9d2e6894a77a73286313c9f9c8b'
-REDIRECT_URI = 'http://localhost:8080/'
+load_dotenv()
+CLIENT_ID = os.getenv('CLIENT_ID')
+CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URL')
 
 # Authenticate with Spotify
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
