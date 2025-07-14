@@ -57,7 +57,7 @@ def store_song_data(song_name, artist_name, album_name, duration_ms, timestamp):
     INSERT INTO spotify_history (song_name, artist_name, album_name, duration_ms, timestamp) VALUES (?, ?, ?, ?, ?)
     ''', (song_name, artist_name, album_name, duration_ms, timestamp))
     conn.commit()
-    print(f"Stored: {song_name} (song length: {duration_str}) by {artist_name} at {timestamp}")
+    print(f"Stored: {song_name} (song length: {duration_str}) by {artist_name} at {timestamp}", flush=True)
 
 
 # Poll Spotify API for currently playing track
@@ -87,5 +87,5 @@ while True:
         print("Spotify API timed out... Retrying connection now...")
     except Exception as e:
         print(f"Unexpected error: {e}")
-        
-    time.sleep(0.25)  # Poll every 0.25 seconds
+
+    time.sleep(0.5)  # Poll every 0.25 seconds
