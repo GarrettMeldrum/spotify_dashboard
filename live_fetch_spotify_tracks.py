@@ -83,6 +83,8 @@ while True:
                 last_song_id = track_id
         else:
             pass
+    except requests.exceptions.ConnectionError:
+        pass
     except requests.exceptions.ReadTimeout:
         print("Spotify API timed out... Retrying connection now...")
     except Exception as e:
