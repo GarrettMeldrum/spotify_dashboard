@@ -1,36 +1,34 @@
+import os
+import sqlite3
+import time
+from dotenv import load_dotenv
+from datetime import datetime, timezone, timedelta
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import sqlite3
-from dotenv import load_dotenv
-from ftfy import fix_text
-import time, unicodedata, os
-import requests
 
-
+# Load environment variables
 load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URL')
-
 
 # Authenticate with Spotify
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
     redirect_uri=REDIRECT_URI,
-    scope="user-read-currently-playing"
+    scope="user-read-recently-played user-read-playback-state"
 ))
 
-
-# Connect to SQLite database
-conn = sqlite3.connect('spotify_history.db')
+# Connect to SQLite
+conn = sqlite3.connect('spotify_history.db', check_same_thread=False)
 cursor = conn.cursor()
 
-
-# Create table if it doesn't exist
+# Create table with track_id
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS spotify_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id TEXT,
     song_name TEXT,
     artist_name TEXT,
     album_name TEXT,
@@ -40,54 +38,78 @@ CREATE TABLE IF NOT EXISTS spotify_history (
 ''')
 conn.commit()
 
+def get_last_stored_timestamp():
+    cursor.execute('SELECT MAX(timestamp) FROM spotify_history')
+    result = cursor.fetchone()[0]
+    return datetime.fromisoformat(result).replace(tzinfo=timezone.utc) if result else None
 
-# Clean text to fit our format
-def clean_text(text):
-    fixed = fix_text(text)
-    return unicodedata.normalize("NFC", fixed)
+def store_recent_tracks():
+    last_timestamp = get_last_stored_timestamp()
+    new_tracks = []
 
-
-# Function to store song data
-def store_song_data(song_name, artist_name, album_name, duration_ms, timestamp):
-    minutes = (duration_ms // 1000) // 60
-    seconds = (duration_ms // 1000) % 60
-    duration_str = f"{minutes}:{seconds:02d}"
-
-    cursor.execute('''
-    INSERT INTO spotify_history (song_name, artist_name, album_name, duration_ms, timestamp) VALUES (?, ?, ?, ?, ?)
-    ''', (song_name, artist_name, album_name, duration_ms, timestamp))
-    conn.commit()
-    print(f"Stored: {song_name} (song length: {duration_str}) by {artist_name} at {timestamp}", flush=True)
-
-
-# Poll Spotify API for currently playing track
-last_song_id = None
-while True:
+    # 1. Recently played
     try:
-        current_track = sp.current_user_playing_track()
-        if current_track and current_track.get('item'):
-            track_id = current_track['item']['id']
-            if track_id != last_song_id:  # New song detected
-                song_name = clean_text(current_track['item']['name'])
-                artist_name = clean_text(current_track['item']['artists'][0]['name'])
-                album_name = clean_text(current_track['item']['album']['name'])
-                duration_ms = current_track['item']['duration_ms']
-                timestamp = current_track['timestamp']  # Unix timestamp in milliseconds
-
-                # Convert timestamp to a readable format
-                from datetime import datetime
-                timestamp = datetime.fromtimestamp(timestamp / 1000).strftime('%Y-%m-%d %H:%M:%S')
-
-                # Store the song data
-                store_song_data(song_name, artist_name, album_name, duration_ms, timestamp)
-                last_song_id = track_id
-        else:
-            pass
-    except requests.exceptions.ConnectionError:
-        pass
-    except requests.exceptions.ReadTimeout:
-        print("Spotify API timed out... Retrying connection now...")
+        results = sp.current_user_recently_played(limit=50)
+        for item in results['items']:
+            played_at = datetime.fromisoformat(item['played_at'].replace('Z', '+00:00'))
+            if last_timestamp is None or played_at > last_timestamp:
+                track = item['track']
+                new_tracks.append((
+                    track['id'],
+                    track['name'],
+                    track['artists'][0]['name'],
+                    track['album']['name'],
+                    track['duration_ms'],
+                    played_at.isoformat()
+                ))
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        print(f"Error fetching recently played: {e}")
 
-    time.sleep(0.5)  # Poll every 0.25 seconds
+    # 2. Currently playing
+    try:
+        current = sp.current_playback()
+        if current and current['is_playing']:
+            track = current['item']
+            track_id = track['id']
+
+            # Check if this track is already stored in the last 5 minutes
+            five_minutes_ago = datetime.utcnow().replace(tzinfo=timezone.utc) - timedelta(minutes=5)
+            cursor.execute('''
+                SELECT COUNT(*) FROM spotify_history
+                WHERE track_id = ? AND timestamp > ?
+            ''', (track_id, five_minutes_ago.isoformat()))
+            already_exists = cursor.fetchone()[0]
+
+            if not already_exists:
+                new_tracks.append((
+                    track['id'],
+                    track['name'],
+                    track['artists'][0]['name'],
+                    track['album']['name'],
+                    track['duration_ms'],
+                    datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+                ))
+    except Exception as e:
+        print(f"Error checking current playback: {e}")
+
+    # 3. Insert new tracks
+    if new_tracks:
+        cursor.executemany('''
+            INSERT INTO spotify_history (track_id, song_name, artist_name, album_name, duration_ms, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', new_tracks)
+        conn.commit()
+        print(f"[{datetime.now().isoformat()}] Stored {len(new_tracks)} new tracks.")
+    else:
+        print(f"[{datetime.now().isoformat()}] No new tracks to store.")
+
+# Polling loop
+print("Polling every 30 seconds. Press Ctrl+C to stop.")
+try:
+    while True:
+        store_recent_tracks()
+        time.sleep(30)
+except KeyboardInterrupt:
+    print("Stopping polling...")
+finally:
+    conn.close()
