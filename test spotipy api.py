@@ -20,7 +20,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_secret=CLIENT_SECRET,
     redirect_uri=REDIRECT_URI,
     scope="user-read-currently-playing"
-))
+, requests_timeout=10))
 
 
 # Connect to SQLite database
@@ -72,8 +72,11 @@ while True:
         last_played_track_id = last_played_track_id_row[0] if last_played_track_id_row else None
 
         item = current.get('item', {})
+        if item is None: continue
         album = item.get('album', {})
+        if album is None: continue
         artists = item.get('artists', [])
+        if artists is None: continue
 
         played_at = datetime.fromtimestamp(current.get('timestamp') / 1000).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -93,7 +96,7 @@ while True:
         album_type = album.get('album_type')
 
         if track_id != last_played_track_id:
-            print(f'Adding new track... {track_name} at timestamp {played_at}')
+            print(f'Adding new track... {track_name} by {artist_01} at timestamp {played_at}')
             cursor.execute(
                 '''
                 INSERT OR IGNORE INTO spotify_history (
@@ -123,11 +126,14 @@ while True:
             retry_after = int(e.headers.get("Retry-After", 30))
             print(f"Rate limited. Retrying after {retry_after} seconds...")
             time.sleep(retry_after)
+        if e.http_status == 443:
+            time.sleep(30)
         else:
             print(f"Unexpected Spotify exception has been raised... \n{e}")
-
+            time.sleep(30)
     except Exception as e:
         print(e)
+        time.sleep(30)
 
 
     '''
@@ -139,7 +145,6 @@ while True:
     for row in rows:
         print(row)
     '''
-
 
 
     '''
