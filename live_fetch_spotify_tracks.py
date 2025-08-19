@@ -1,12 +1,10 @@
 import os
 import sqlite3
-import time
 from dotenv import load_dotenv
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import pandas as pd
-import json
+from dateutil.parser import isoparse
 
 # Load environment variables
 load_dotenv()
@@ -39,87 +37,62 @@ CREATE TABLE IF NOT EXISTS spotify_history (
     artist_name_05 TEXT,
     album_id TEXT,
     album_name TEXT,
-    album_release_date DATETIME,
+    album_release_date TEXT,
     album_type TEXT,
     duration_ms INTEGER,
-    played_at DATETIME
+    played_at TEXT
 )
 ''')
 conn.commit()
 
-cursor.execute("SELECT played_at FROM spotify_history ORDER BY played_at DESC LIMIT 1")
-last_played_row = cursor.fetchone()
-last_played_at = last_played_row[0] if last_played_row else None
-print(last_played_at)
-
-
 # The 50 most recent played songs
 results = sp.current_user_recently_played(limit=50)
 
+def parse_played_at(ts):
+    if ts is None:
+        return None
+    return isoparse(ts)
+
+cursor.execute("SELECT played_at FROM spotify_history ORDER BY played_at DESC LIMIT 1")
+last_played_row = cursor.fetchone()
+last_played_at = last_played_row[0] if last_played_row else None
+last_played_at_dt = parse_played_at(last_played_at)
+
 new_tracks = []
-for item in results['items']:
+for item in reversed(results['items']):
+    track = item.get('track', {})
+    album = track.get('album', {})
+    artists = track.get('artists', [])
+
     ### Track information
-    try:
-        played_at = item['played_at']
-    except Exception as e:
-        pass
-
-    try:
-        track_id = item['track']['name']
-    except Exception as e:
-        pass
-
-    try:
-        track_name = item['track']['name']
-    except Exception as e:
-        pass
-
-    try:
-        duration_ms = item['track']['duration_ms']
-    except Exception as e:
-        pass
-
+    track_id = track.get('id')
+    track_name = track.get('name')
+    duration_ms = track.get('duration_ms')
+    played_at = item.get('played_at')
 
     ### Artist information
-    artists = item['track']['artists']
-    artist_01 = artists[0]['name']
+    artist_01 = artists[0]['name'] if len(artists) > 0 else None
     artist_02 = artists[1]['name'] if len(artists) > 1 else None
     artist_03 = artists[2]['name'] if len(artists) > 2 else None
     artist_04 = artists[3]['name'] if len(artists) > 3 else None
     artist_05 = artists[4]['name'] if len(artists) > 4 else None
 
-
     ### Album information
-    try:
-        album_id = item['track']['album']['id']
-    except Exception as e:
-        pass
+    album_id = album.get('id')
+    album_name = album.get('name')
+    album_release_date = album.get('release_date')
+    album_type = album.get('album_type')
 
-    try:
-        album_name = item['track']['album']['name']
-    except Exception as e:
-        pass
+    played_at_dt = parse_played_at(played_at)
 
-    try:
-        album_release_date = item['track']['album']['release_date']
-    except Exception as e:
-        pass
-
-    try:
-        album_type = item['track']['album']['album_type']
-    except Exception as e:
-        pass
-
-
-    if last_played_at is None or played_at > last_played_at:
+    if last_played_at_dt is None or (played_at_dt and played_at_dt > last_played_at_dt):
+        print(f"Adding: {track_name} at {played_at_dt}")
         new_tracks.append((
             track_id, track_name, 
             artist_01, artist_02, artist_03, artist_04, artist_05, 
             album_id, album_name, album_release_date, album_type, 
             duration_ms, played_at
-            ))
-
-
+        ))
 
 cursor.executemany(
     '''
@@ -140,9 +113,13 @@ cursor.executemany(
         ) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
-    (new_tracks)
+    new_tracks
 )
 conn.commit()
+conn.close()
+
+
+'''
 
 cursor.execute("SELECT * FROM spotify_history")
 rows = cursor.fetchall()
@@ -151,3 +128,4 @@ rows = cursor.fetchall()
 print("Contents of the 'users' table:")
 for row in rows:
     print(row)
+'''
