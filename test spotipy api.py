@@ -55,15 +55,17 @@ while True:
 
     try:
         current = sp.current_user_playing_track()
-        if not current:
+        if current is None:
             print("Idle count:", idle_count)
             if idle_count >= (300): # 5 minutes
                 idle_count += 30
                 time.sleep(30)
             else:
                 idle_count += 10
-                time.sleep(5)
+                time.sleep(10)
             continue
+
+
         idle_count = 0
         cursor.execute("SELECT track_id FROM spotify_history ORDER BY played_at desc limit 1")
         last_played_track_id_row = cursor.fetchone()
