@@ -20,6 +20,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
     redirect_uri=REDIRECT_URI,
+    open_browser = False,
     scope="user-read-currently-playing"
     ), requests_timeout=10
 )
@@ -123,7 +124,7 @@ while True:
                     duration_ms,
                     played_at
                     ) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 [track_id, track_name, 
                  artist_01, artist_02, artist_03, artist_04, artist_05, 
