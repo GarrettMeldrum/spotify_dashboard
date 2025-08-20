@@ -8,6 +8,7 @@ import time, os
 from datetime import datetime
 
 
+# Load secrets
 load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
@@ -20,13 +21,13 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_secret=CLIENT_SECRET,
     redirect_uri=REDIRECT_URI,
     scope="user-read-currently-playing"
-, requests_timeout=10))
+    ), requests_timeout=10
+)
 
 
 # Connect to SQLite database
 conn = sqlite3.connect('spotify_history.db')
 cursor = conn.cursor()
-
 
 # Create table if it doesn't exist
 cursor.execute('''
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS spotify_history (
 ''')
 conn.commit()
 
+
 idle_count = 0
 # Polling loop
 while True:
@@ -64,13 +66,10 @@ while True:
                 idle_count += 10
                 time.sleep(10)
             continue
-
-
         idle_count = 0
-        cursor.execute("SELECT track_id FROM spotify_history ORDER BY played_at desc limit 1")
-        last_played_track_id_row = cursor.fetchone()
-        last_played_track_id = last_played_track_id_row[0] if last_played_track_id_row else None
-
+        
+        
+        # Get all the API data available
         item = current.get('item', {})
         if item is None: continue
         album = item.get('album', {})
@@ -78,8 +77,7 @@ while True:
         artists = item.get('artists', [])
         if artists is None: continue
 
-        played_at = datetime.fromtimestamp(current.get('timestamp') / 1000).strftime('%Y-%m-%d %H:%M:%S')
-
+        played_at = current.get('timestamp')
         duration_ms = item.get('duration_ms')
         track_id = item.get('id')
         track_name = item.get('name')
@@ -95,8 +93,19 @@ while True:
         album_release_date = album.get('release_date')
         album_type = album.get('album_type')
 
+
+        # Find the last inserted row into the table
+        cursor.execute(
+            "SELECT track_id FROM spotify_history ORDER BY played_at desc limit 1"
+        )
+        last_played_track_id_row = cursor.fetchone()
+        last_played_track_id = last_played_track_id_row[0] if last_played_track_id_row else None
+
+        # If current track not last stored track
         if track_id != last_played_track_id:
-            print(f'Adding new track... {track_name} by {artist_01} at timestamp {played_at}')
+            timestamp_for_print = datetime.fromtimestamp(played_at / 1000).strftime('%Y-%m-%d %H:%M:%S')
+            print(f'Adding new track... {track_name} by {artist_01} at timestamp {timestamp_for_print}')
+            
             cursor.execute(
                 '''
                 INSERT OR IGNORE INTO spotify_history (
@@ -111,16 +120,21 @@ while True:
                     album_name, 
                     album_release_date, 
                     album_type, 
-                    duration_ms, 
+                    duration_ms,
                     played_at
                     ) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,)
                 ''',
-                [track_id, track_name, artist_01, artist_02, artist_03, artist_04, artist_05, album_id, album_name, album_release_date, album_type, duration_ms, played_at]
+                [track_id, track_name, 
+                 artist_01, artist_02, artist_03, artist_04, artist_05, 
+                 album_id, album_name, album_release_date, album_type, 
+                 duration_ms, played_at]
             )
             conn.commit()
         time.sleep(1)
     
+
+    # Exception handling
     except SpotifyException as e:
         if e.http_status == 429:
             retry_after = int(e.headers.get("Retry-After", 30))
