@@ -1,6 +1,6 @@
 # *Spotify API ETL Pipeline: Dashboard + Real-Time React Streaming*
 
-Introduction: After discovering the Spotify API and more specifically the recent listens endpoint of the API, I knew I wanted to store this information with a script and run analytics on it to dashboard to my personal website. I had done a bit of exploring online and could not find anything similar to gain inspiration from. So, I dove into the documentation and from there, began structuring how the project should be handled. 
+Introduction: After discovering the Spotify API and more specifically the recent listens endpoint of the API, I knew I wanted to store this information with a script and run analytics on it to dashboard to my personal website. I had done a bit of exploring online and could not find anything similar to gain inspiration from. So, I dove into the documentation and from there, began structuring how the project should be handled. This script will be containerized in a docker env that is hosted on my homelab.
 
 ## 1. Spotify API connection with Spotipy
 
