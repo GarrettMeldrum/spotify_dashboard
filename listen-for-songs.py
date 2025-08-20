@@ -123,7 +123,7 @@ while True:
                     duration_ms,
                     played_at
                     ) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 [track_id, track_name, 
                  artist_01, artist_02, artist_03, artist_04, artist_05, 
