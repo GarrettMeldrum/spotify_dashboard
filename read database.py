@@ -11,7 +11,7 @@ db_path = Path(__file__).resolve().parent / "spotify_history.db"
 conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 cursor = conn.cursor()
 
-cursor.execute("SELECT * FROM spotify_history ORDER BY start_timestamp ASC")
+cursor.execute("SELECT * FROM spotify_history ORDER BY played_at ASC")
 rows = cursor.fetchall()
 
 for row in rows:

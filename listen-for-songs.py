@@ -3,6 +3,7 @@ from spotipy.oauth2 import SpotifyOAuth
 from spotipy.exceptions import SpotifyException
 
 import sqlite3
+import requests
 from dotenv import load_dotenv
 import time, os
 from datetime import datetime
@@ -13,6 +14,8 @@ load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URL')
+API_BASE = os.getenv("API_BASE")
+LOGGER_TOKEN = os.getenv("LOGGER_TOKEN")
 
 
 # Authenticate with Spotify
@@ -132,6 +135,31 @@ while True:
                  duration_ms, played_at]
             )
             conn.commit()
+            
+            '''
+            def notify_new_play(payload):
+                for attempt in range(3):
+                    try:
+                        requests.post(
+                            f"{API_BASE}/v1/notify",
+                            headers={"X-Logger-Token": LOGGER_TOKEN, "Content-Type": "application/json"},
+                            json=payload,
+                            timeout=(1, 2),
+                        )
+                        return
+                    except Exception as e:
+                        print(e)
+                        time.sleep(0.2 * (attempt + 1))
+
+            notify_new_play({
+                "played_at": played_at,           # epoch ms
+                "track_id": track_id,
+                "track_name": track_name,
+                "artist_name_01": artist_01,
+                "album_name": album_name,
+                "duration_ms": duration_ms,
+            })
+            '''
         time.sleep(1)
     
 
