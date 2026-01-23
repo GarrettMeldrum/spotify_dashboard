@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS spotify_history (
     artist_name_05 TEXT,
     album_id TEXT,
     album_name TEXT,
+    album_cover_url TEXT,
     album_release_date TEXT,
     album_type TEXT,
     duration_ms INTEGER,
@@ -85,6 +86,8 @@ while True:
         duration_ms = item.get('duration_ms')
         track_id = item.get('id')
         track_name = item.get('name')
+        album_images = album.get('images', [])
+        album_cover_url = album_images[1]['url'] if album_images else None
 
         artist_01 = artists[0]['name'] if len(artists) > 0 else None
         artist_02 = artists[1]['name'] if len(artists) > 1 else None
@@ -122,6 +125,7 @@ while True:
                     artist_name_05, 
                     album_id, 
                     album_name, 
+                    album_cover_url,
                     album_release_date, 
                     album_type, 
                     duration_ms,
