@@ -87,7 +87,7 @@ while True:
         track_id = item.get('id')
         track_name = item.get('name')
         album_images = album.get('images', [])
-        album_cover_url = album_images[1]['url'] if album_images else None
+        album_cover_url = album_images[1]['url']
 
         artist_01 = artists[0]['name'] if len(artists) > 0 else None
         artist_02 = artists[1]['name'] if len(artists) > 1 else None
@@ -135,7 +135,7 @@ while True:
                 ''',
                 [track_id, track_name, 
                  artist_01, artist_02, artist_03, artist_04, artist_05, 
-                 album_id, album_name, album_release_date, album_type, 
+                 album_id, album_name, album_cover_url, album_release_date, album_type, 
                  duration_ms, played_at]
             )
             conn.commit()
