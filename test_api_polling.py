@@ -11,6 +11,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URL')
+DB = os.getenv('DB')
 
 # If the database/tables don't exists, create it based on the schema.sql
 def init_database(cursor, schema_file='schema.sql'):
@@ -119,7 +120,7 @@ def main():
     print("Spotify Polling Service Starting...")
     
     # Connect to database
-    conn = sqlite3.connect('test.db')
+    conn = sqlite3.connect(DB)
     cursor = conn.cursor()
     init_database(cursor)
     conn.commit()
