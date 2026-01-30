@@ -24,7 +24,8 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_secret=CLIENT_SECRET,
     redirect_uri=REDIRECT_URI,
     open_browser=False,
-    scope="user-read-currently-playing user-read-playback-state"
+    scope="user-read-currently-playing user-read-playback-state",
+    cache_path="/home/garre/Github/spotify_dashboard/.cache-flask"
 ), requests_timeout=10)
 
 app = Flask(__name__)
