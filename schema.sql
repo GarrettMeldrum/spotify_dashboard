@@ -3,11 +3,10 @@ CREATE TABLE IF NOT EXISTS albums (
     album_id TEXT PRIMARY KEY,
     album_name TEXT NOT NULL,
     album_release_date TEXT,
-    album_release_date_precision TEXT,
     album_total_tracks INTEGER,
     album_image_url TEXT,
     album_spotify_url TEXT,
-    ablum_uri TEXT,
+    album_uri TEXT,
     album_type TEXT
 );
 

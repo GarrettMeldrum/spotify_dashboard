@@ -41,16 +41,17 @@ def poll_spotify(sp, cursor):
         cursor.execute(
             """
                 INSERT OR IGNORE INTO 
-                albums (album_id, album_name, album_image_url, album_url, album_release_date, album_total_tracks, album_type) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                albums (album_id, album_name, album_release_date, album_total_tracks, album_image_url, album_spotify_url, album_uri, album_type) 
+                VALUES (?,?,?,?,?,?,?,?)
             """, 
             (
                 track['album']['id'],
                 track['album']['name'],
+                track['album']['release_date'],
+                track['album']['total_tracks'],
                 track['album']['images'][0]['url'] if track['album']['images'] else None,
                 track['album']['external_urls']['spotify'],
-                track['album'].get('release_date'),
-                track['album']['total_tracks'],
+                track['album']['uri'],
                 track['album']['album_type']
             )
         )
@@ -59,17 +60,22 @@ def poll_spotify(sp, cursor):
         cursor.execute(
             """
                 INSERT OR IGNORE INTO 
-                tracks (played_at, track_id, track_name, track_uri, track_popularity, track_duration_ms, track_explicit, track_spotify_url, album_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tracks (played_at, track_id, track_name, track_popularity, track_duration_ms, track_explicit, track_disc_number, track_number, track_type, track_href, track_isrc, track_uri, track_spotify_url, album_id) 
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, 
             (
                 item['played_at'],
                 track['id'],
                 track['name'],
-                track['uri'],
                 track['popularity'],
                 track['duration_ms'],
                 track['explicit'],
+                track['disc_number'],
+                track['track_number'],
+                track['type'],
+                track['href'],
+                track.get('external_ids', {}).get('isrc'),
+                track['uri'],
                 track['external_urls']['spotify'],
                 track['album']['id']
             )
