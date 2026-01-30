@@ -2,7 +2,6 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from spotipy.exceptions import SpotifyException
 
-import sqlite3
 import requests
 from dotenv import load_dotenv
 import time, os

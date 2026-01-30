@@ -41,6 +41,67 @@ def health():
         ]
     })
 
+@app.get("/currently-playing")
+def currently_playing():
+    """Get currently playing track directly from Spotify API"""
+    try:
+        # Call Spotify API directly
+        current = sp.current_playback()
+        
+        if not current or not current.get('item'):
+            # Nothing playing, return recent from database
+            db = get_db()
+            recent = db.execute("""
+                SELECT 
+                    t.track_id,
+                    t.track_name,
+                    ar.artist_name,
+                    a.album_name,
+                    a.album_image_url,
+                    t.track_duration_ms
+                FROM tracks t
+                JOIN albums a ON t.album_id = a.album_id
+                JOIN track_artists ta ON t.played_at = ta.played_at
+                JOIN artists ar ON ta.artist_id = ar.artist_id
+                WHERE ta.artist_position = 0
+                ORDER BY t.played_at DESC
+                LIMIT 3
+            """).fetchall()
+            
+            return jsonify({
+                "is_playing": False,
+                "tracks": [dict(row) for row in recent]
+            })
+        
+        track = current['item']
+        
+        # Get play count from database
+        db = get_db()
+        play_count_result = db.execute(
+            "SELECT COUNT(*) as count FROM tracks WHERE track_id = ?",
+            (track['id'],)
+        ).fetchone()
+        play_count = play_count_result['count'] if play_count_result else 0
+        
+        return jsonify({
+            "is_playing": current.get('is_playing', False),
+            "progress_ms": current.get('progress_ms', 0),
+            "track": {
+                "track_id": track['id'],
+                "track_name": track['name'],
+                "artist_name": ', '.join([artist['name'] for artist in track['artists']]),
+                "album_name": track['album']['name'],
+                "album_image_url": track['album']['images'][0]['url'] if track['album']['images'] else None,
+                "track_duration_ms": track['duration_ms'],
+                "track_spotify_url": track['external_urls']['spotify'],
+                "play_count": play_count
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error fetching currently playing: {e}")
+        return jsonify({"is_playing": False, "tracks": []}), 500
+
 @app.get("/analytics")
 def analytics():
     """Get analytics and statistics"""
