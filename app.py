@@ -13,6 +13,18 @@ directory = os.path.dirname(os.path.abspath(__file__))
 db = os.getenv("DB")
 db_path = os.path.join(directory, db)
 
+CLIENT_ID = os.getenv('CLIENT_ID')
+CLIENT_SECRET = os.getenv('CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URL')
+
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    redirect_uri=REDIRECT_URI,
+    open_browser=False,
+    scope="user-read-currently-playing user-read-playback-state"
+), requests_timeout=10)
+
 app = Flask(__name__)
 CORS(app)
 
