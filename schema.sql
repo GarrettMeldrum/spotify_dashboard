@@ -47,3 +47,4 @@ CREATE TABLE IF NOT EXISTS track_artists (
 CREATE INDEX IF NOT EXISTS idx_track_artists_artist ON track_artists(artist_id);
 CREATE INDEX IF NOT EXISTS idx_tracks_album ON tracks(album_id);
 CREATE INDEX IF NOT EXISTS idx_tracks_played_at ON tracks(played_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tracks_track_id ON tracks(track_id);
