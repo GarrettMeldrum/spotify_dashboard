@@ -30,7 +30,7 @@ def poll_spotify(sp, cursor):
     # Get recently played
     recent = sp.current_user_recently_played(limit=50)
     
-    new_tracks_count = 0
+    new_tracks = []
     
     for item in recent['items']:
         if item['played_at'] <= last_timestamp:
@@ -83,6 +83,7 @@ def poll_spotify(sp, cursor):
         )
         
         # Insert artists
+        artist_names = []
         for position, artist in enumerate(track['artists']):
             cursor.execute(
                 """
@@ -110,10 +111,16 @@ def poll_spotify(sp, cursor):
                     position
                 )
             )
+            artist_names.append(artist['name'])
         
-        new_tracks_count += 1
+        # Store track info for logging
+        new_tracks.append({
+            'track_name': track['name'],
+            'artist_name': ', '.join(artist_names),
+            'played_at': item['played_at']
+        })
    
-    return new_tracks_count
+    return new_tracks
 
 # main() controls the looping
 def main():
@@ -144,8 +151,10 @@ def main():
             new_tracks = poll_spotify(sp, cursor)
             conn.commit()
             
-            if new_tracks > 0:
-                print(f"[{timestamp}] Inserted {new_tracks} new tracks")
+            if new_tracks:
+                print(f"[{timestamp}] Added {len(new_tracks)} new track(s):")
+                for track_info in new_tracks:
+                    print(f"  → {track_info['track_name']} by {track_info['artist_name']} (played at {track_info['played_at']})")
             else:
                 print(f"[{timestamp}] No new tracks")
             
