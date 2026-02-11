@@ -1,6 +1,6 @@
 import sqlite3
 
-conn = sqlite3.connect('test.db')
+conn = sqlite3.connect('spotify_data.db')
 conn.row_factory = sqlite3.Row  # Dict-like access
 cursor = conn.cursor()
 

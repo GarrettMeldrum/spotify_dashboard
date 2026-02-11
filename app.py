@@ -50,21 +50,27 @@ def health():
     return jsonify({
         "status": "ok",
         "endpoints": [
+            "/currently-playing",
             "/analytics",
-            "/listening-time",
-            "/recent?limit=10"
+            "/listening-time"
         ]
     })
 
 @app.get("/currently-playing")
 def currently_playing():
-    """Get currently playing track directly from Spotify API"""
+    """Get currently playing track or most recent from database"""
     try:
-        # Call Spotify API directly
-        current = sp.current_playback()
+        # Try to get current playback from Spotify API
+        try:
+            current = sp.current_playback()
+        except Exception as spotify_error:
+            print(f"Spotify API error: {spotify_error}")
+            current = None
+        
         is_playing = current and current.get('item') and current.get('is_playing', False)
-
+        
         if not is_playing:
+            # Nothing playing - return most recent track from database
             db = get_db()
             recent = db.execute("""
                 SELECT 
@@ -73,7 +79,9 @@ def currently_playing():
                     ar.artist_name,
                     a.album_name,
                     a.album_image_url,
-                    t.track_duration_ms
+                    t.track_duration_ms,
+                    t.track_spotify_url,
+                    (SELECT COUNT(*) FROM tracks WHERE track_id = t.track_id) as play_count
                 FROM tracks t
                 JOIN albums a ON t.album_id = a.album_id
                 JOIN track_artists ta ON t.played_at = ta.played_at
@@ -81,21 +89,25 @@ def currently_playing():
                 WHERE ta.artist_position = 0
                 ORDER BY t.played_at DESC
                 LIMIT 1
-            """).fetchall()
-
+            """).fetchone()
+            
             return jsonify({
                 "is_playing": False,
                 "track": dict(recent) if recent else None
             })
         
+        # Currently playing - get live data
         track = current['item']
         db = get_db()
-        play_count = db.execute("SELECT COUNT(*) as count FROM tracks WHERE track_id = ?", (track['id'],)).fetcghone()['count']
-
+        play_count = db.execute(
+            "SELECT COUNT(*) as count FROM tracks WHERE track_id = ?",
+            (track['id'],)
+        ).fetchone()['count']
+        
         return jsonify({
             "is_playing": True,
             "progress_ms": current.get('progress_ms', 0),
-            track: {
+            "track": {
                 "track_id": track['id'],
                 "track_name": track['name'],
                 "artist_name": ', '.join(artist['name'] for artist in track['artists']),
@@ -106,10 +118,10 @@ def currently_playing():
                 "play_count": play_count
             }
         })
-
+        
     except Exception as e:
-        print(f"Error fetching currently playing track: {e}")
-        return jsonify({"error": str(e)}), 500
+        print(f"Error: {e}")
+        return jsonify({"is_playing": False, "track": None}), 500
 
 @app.get("/analytics")
 def analytics():

@@ -1,2 +1,3 @@
 .env
 spotify_history.db
+spotify_data.db
