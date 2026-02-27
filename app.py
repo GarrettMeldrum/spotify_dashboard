@@ -259,6 +259,40 @@ def analytics():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.get("/recently-played")
+def recently_played():
+    try:
+        db = get_db()
+        recent_plays = db.execute(
+            """
+            SELECT 
+                t.played_at,
+                t.track_id,
+                t.track_name,
+                t.track_duration_ms,
+                a.album_name,
+                a.album_image_url,
+                ar.artist_name
+            FROM 
+                tracks t
+            JOIN 
+                albums a ON t.album_id = a.album_id
+            JOIN 
+                track_artists ta ON t.played_at = ta.played_at
+            JOIN 
+                artists ar ON ta.artist_id = ar.artist_id
+            WHERE 
+                ta.artist_position = 0
+            ORDER BY 
+                t.played_at DESC
+            LIMIT 
+                10
+            """
+        ).fetchall()
+        return jsonify([dict(row) for row in recent_plays])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.get("/listening-time")
 def listening_time():
     """Total listening time and stats"""

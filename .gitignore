@@ -1,3 +1,6 @@
 .env
 spotify_history.db
 spotify_data.db
+spotify_history.db-shm
+test.db
+spotify_history.db-wal
