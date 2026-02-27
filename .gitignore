@@ -4,3 +4,6 @@ spotify_data.db
 spotify_history.db-shm
 test.db
 spotify_history.db-wal
+.cache
+.cache-flask
+__pycache__
