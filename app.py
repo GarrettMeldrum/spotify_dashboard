@@ -8,9 +8,9 @@ from datetime import datetime
 
 # Load secrets and credentials. If you are having issues, delete .cache and reauthenticate
 load_dotenv()
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
-REDIRECT_URI = os.getenv('REDIRECT_URL')
+CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
+REDIRECT_URI = os.getenv('SPOTFIY_REDIRECT_URI')
 DB = os.getenv('DB')
 
 # If the database/tables don't exists, create it based on the schema.sql
