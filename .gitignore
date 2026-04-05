@@ -1,2 +1,5 @@
 .env
-spotify_history.db
+.cache
+__pycache__/
+*.db
+

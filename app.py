@@ -1,279 +1,173 @@
-import os
 import sqlite3
-from flask import Flask, jsonify, request, g
-from flask_cors import CORS
-from dotenv import load_dotenv
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+from dotenv import load_dotenv
+import os
+import time
+from datetime import datetime
 
-try:
-    load_dotenv()
-except Exception:
-    pass
-
-directory = os.path.dirname(os.path.abspath(__file__))
-db = os.getenv("DB")
-db_path = os.path.join(directory, db)
-
+# Load secrets and credentials. If you are having issues, delete .cache and reauthenticate
+load_dotenv()
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URL')
+DB = os.getenv('DB')
 
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    redirect_uri=REDIRECT_URI,
-    open_browser=False,
-    scope="user-read-currently-playing user-read-playback-state",
-    cache_path="/home/garre/Github/spotify_dashboard/.cache-flask"
-), requests_timeout=10)
+# If the database/tables don't exists, create it based on the schema.sql
+def init_database(cursor, schema_file='schema.sql'):
+    with open(schema_file, 'r') as f:
+        schema = f.read()
+    cursor.executescript(schema)
+    print("Database initialized")
 
-app = Flask(__name__)
-CORS(app)
-
-def get_db() -> sqlite3.Connection:
-    if "_db" not in g:
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        g._db = conn
-    return g._db
+# This is the main polling and grabbing function
+def poll_spotify(sp, cursor):
+    # Get last timestamp
+    cursor.execute("SELECT MAX(played_at) FROM tracks")
+    result = cursor.fetchone()[0]
+    last_timestamp = result if result else "1970-01-01T00:00:00Z"
     
-@app.teardown_appcontext
-def close_db(_exc):
-    db = g.pop("_db", None)
-    if db is not None:
-        db.close()
-
-@app.get("/")
-def health():
-    """Health check and API info"""
-    return jsonify({
-        "status": "ok",
-        "endpoints": [
-            "/analytics",
-            "/listening-time",
-            "/recent?limit=10"
-        ]
-    })
-
-@app.get("/currently-playing")
-def currently_playing():
-    """Get currently playing track directly from Spotify API"""
-    try:
-        # Call Spotify API directly
-        current = sp.current_playback()
-        is_playing = current and current.get('item') and current.get('is_playing', False)
-
-        if not is_playing:
-            db = get_db()
-            recent = db.execute("""
-                SELECT 
-                    t.track_id,
-                    t.track_name,
-                    ar.artist_name,
-                    a.album_name,
-                    a.album_image_url,
-                    t.track_duration_ms
-                FROM tracks t
-                JOIN albums a ON t.album_id = a.album_id
-                JOIN track_artists ta ON t.played_at = ta.played_at
-                JOIN artists ar ON ta.artist_id = ar.artist_id
-                WHERE ta.artist_position = 0
-                ORDER BY t.played_at DESC
-                LIMIT 1
-            """).fetchall()
-
-            return jsonify({
-                "is_playing": False,
-                "track": dict(recent) if recent else None
-            })
+    # Get recently played
+    recent = sp.current_user_recently_played(limit=50)
+    
+    new_tracks = []
+    
+    for item in recent['items']:
+        if item['played_at'] <= last_timestamp:
+            break
         
-        track = current['item']
-        db = get_db()
-        play_count = db.execute("SELECT COUNT(*) as count FROM tracks WHERE track_id = ?", (track['id'],)).fetcghone()['count']
-
-        return jsonify({
-            "is_playing": True,
-            "progress_ms": current.get('progress_ms', 0),
-            track: {
-                "track_id": track['id'],
-                "track_name": track['name'],
-                "artist_name": ', '.join(artist['name'] for artist in track['artists']),
-                "album_name": track['album']['name'],
-                "album_image_url": track['album']['images'][0]['url'] if track['album']['images'] else None,
-                "track_duration_ms": track['duration_ms'],
-                "track_spotify_url": track['external_urls']['spotify'],
-                "play_count": play_count
-            }
-        })
-
-    except Exception as e:
-        print(f"Error fetching currently playing track: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.get("/analytics")
-def analytics():
-    """Get analytics and statistics"""
-    try:
-        db = get_db()
+        track = item['track']
         
-        # Total plays
-        total_plays = db.execute(
-            "SELECT COUNT(*) as count FROM tracks"
-        ).fetchone()['count']
-        
-        # Unique tracks
-        unique_tracks = db.execute(
-            "SELECT COUNT(DISTINCT track_id) as count FROM tracks"
-        ).fetchone()['count']
-        
-        # Unique artists
-        unique_artists = db.execute(
+        # Insert album
+        cursor.execute(
             """
-            SELECT COUNT(DISTINCT artist_id) as count 
-            FROM track_artists 
-            WHERE artist_position = 0
-            """
-        ).fetchone()['count']
+                INSERT OR IGNORE INTO 
+                albums (album_id, album_name, album_release_date, album_total_tracks, album_image_url, album_spotify_url, album_uri, album_type) 
+                VALUES (?,?,?,?,?,?,?,?)
+            """, 
+            (
+                track['album']['id'],
+                track['album']['name'],
+                track['album']['release_date'],
+                track['album']['total_tracks'],
+                track['album']['images'][0]['url'] if track['album']['images'] else None,
+                track['album']['external_urls']['spotify'],
+                track['album']['uri'],
+                track['album']['album_type']
+            )
+        )
         
-        # Top 5 tracks by play count
-        top_tracks = db.execute(
+        # Insert track
+        cursor.execute(
             """
-            SELECT 
-                t.track_id,
-                t.track_name,
-                a.album_name,
-                a.album_image_url,
-                COUNT(*) as play_count,
-                MAX(t.played_at) as last_played
-            FROM 
-                tracks t
-            JOIN
-                albums a ON t.album_id = a.album_id
-            GROUP BY 
-                t.track_id
-            ORDER BY 
-                play_count DESC
-            LIMIT 
-                5
-            """
-        ).fetchall()
-
-        top_tracks_list = []
-        for row in top_tracks:
-            track_data = dict(row)
-
-            artist = db.execute(
+                INSERT OR IGNORE INTO 
+                tracks (played_at, track_id, track_name, track_popularity, track_duration_ms, track_explicit, track_disc_number, track_number, track_type, track_href, track_isrc, track_uri, track_spotify_url, album_id) 
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, 
+            (
+                item['played_at'],
+                track['id'],
+                track['name'],
+                track['popularity'],
+                track['duration_ms'],
+                track['explicit'],
+                track['disc_number'],
+                track['track_number'],
+                track['type'],
+                track['href'],
+                track.get('external_ids', {}).get('isrc'),
+                track['uri'],
+                track['external_urls']['spotify'],
+                track['album']['id']
+            )
+        )
+        
+        # Insert artists
+        artist_names = []
+        for position, artist in enumerate(track['artists']):
+            cursor.execute(
                 """
-                SELECT
-                    a.artist_name
-                FROM
-                    track_artists ta
-                JOIN
-                    artists a ON ta.artist_id = a.artist_id
-                JOIN
-                    tracks t ON ta.played_at = t.played_at
-                WHERE
-                    t.track_id = ? AND ta.artist_position = 0
-                LIMIT
-                    1
-                """,
-                (track_data['track_id'],)
-            ).fetchone()
-
-            track_data['artist_name'] = artist['artist_name'] if artist else 'Unknown'
-            top_tracks_list.append(track_data)
+                    INSERT OR IGNORE INTO 
+                    artists (artist_id, artist_name, artist_url, artist_type)
+                    VALUES (?, ?, ?, ?)
+                """, 
+                (
+                    artist['id'],
+                    artist['name'],
+                    artist['external_urls']['spotify'],
+                    artist['type']
+                )
+            )
+            
+            cursor.execute(
+                """
+                    INSERT OR IGNORE INTO 
+                    track_artists (played_at, artist_id, artist_position)
+                    VALUES (?, ?, ?)
+                """, 
+                (
+                    item['played_at'],
+                    artist['id'],
+                    position
+                )
+            )
+            artist_names.append(artist['name'])
         
-        # Top 8 artists by count
-        top_artists = db.execute(
-            """
-            SELECT
-                ar.artist_id,
-                ar.artist_name,
-                COUNT(*) as play_count  
-            FROM
-                track_artists ta
-            JOIN
-                artists ar ON ta.artist_id = ar.artist_id
-            WHERE
-                ta.artist_position = 0
-            GROUP BY
-                ar.artist_id
-            ORDER BY
-                play_count DESC
-            LIMIT
-                8
-            """
-        ).fetchall()
-        
-        # Recent 10 plays
-        recent_plays = db.execute(
-            """
-            SELECT 
-                t.played_at,
-                t.track_id,
-                t.track_name,
-                t.track_duration_ms,
-                a.album_name,
-                a.album_image_url,
-                ar.artist_name
-            FROM 
-                tracks t
-            JOIN 
-                albums a ON t.album_id = a.album_id
-            JOIN 
-                track_artists ta ON t.played_at = ta.played_at
-            JOIN 
-                artists ar ON ta.artist_id = ar.artist_id
-            WHERE 
-                ta.artist_position = 0
-            ORDER BY 
-                t.played_at DESC
-            LIMIT 
-                10
-            """
-        ).fetchall()
-        
-        return jsonify({
-            "stats": {
-                "total_plays": total_plays,
-                "unique_tracks": unique_tracks,
-                "unique_artists": unique_artists
-            },
-            "top_tracks": top_tracks_list,
-            "top_artists": [dict(row) for row in top_artists],
-            "recent_plays": [dict(row) for row in recent_plays]
+        # Store track info for logging
+        new_tracks.append({
+            'track_name': track['name'],
+            'artist_name': ', '.join(artist_names),
+            'played_at': item['played_at']
         })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+   
+    return new_tracks
 
-@app.get("/listening-time")
-def listening_time():
-    """Total listening time and stats"""
-    try:
-        db = get_db()
+# main() controls the looping
+def main():
+    print("Spotify Polling Service Starting...")
+    
+    # Connect to database
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    init_database(cursor)
+    conn.commit()
+    
+    # Authenticate with Spotify
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET,
+        redirect_uri=REDIRECT_URI,
+        open_browser=False,
+        scope="user-read-recently-played",
+        cache_path="/app/data/.cache"
+    ), requests_timeout=10)
+    
+    print("Connected to Spotify")
+    print("Polling every 30 seconds...")
+    
+    # Main polling loop
+    while True:
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            new_tracks = poll_spotify(sp, cursor)
+            conn.commit()
+            
+            if new_tracks:
+                print(f"[{timestamp}] Added {len(new_tracks)} new track(s):")
+                for track_info in new_tracks:
+                    print(f"  → {track_info['track_name']} by {track_info['artist_name']} (played at {track_info['played_at']})")
+            else:
+                print(f"[{timestamp}] No new tracks")
+            
+        except Exception as e:
+            print(f"[{timestamp}] Error: {e}")
         
-        stats = db.execute("""
-            SELECT 
-                SUM(track_duration_ms) / 1000.0 / 60.0 as total_minutes,
-                AVG(track_duration_ms) / 1000.0 / 60.0 as avg_track_minutes,
-                COUNT(*) as total_plays
-            FROM tracks
-        """).fetchone()
-        
-        total_hours = stats['total_minutes'] / 60 if stats['total_minutes'] else 0
-        total_days = total_hours / 24
-        
-        return jsonify({
-            "total_minutes": round(stats['total_minutes'], 2) if stats['total_minutes'] else 0,
-            "total_hours": round(total_hours, 2),
-            "total_days": round(total_days, 2),
-            "avg_track_minutes": round(stats['avg_track_minutes'], 2) if stats['avg_track_minutes'] else 0,
-            "total_plays": stats['total_plays']
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Wait 30 seconds before next poll
+        time.sleep(30)
 
-
+# Run main when the script is called on
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nStopping Spotify polling script...")
